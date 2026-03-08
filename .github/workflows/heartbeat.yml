@@ -1,30 +1,33 @@
-name: ◉ Heartbeat
+name: ◉ System Status
 
 on:
   schedule:
-    - cron: "0 */6 * * *" # Every 6 hours
+    - cron: "0 6 * * 1" # Every Monday at 06:00 UTC
   workflow_dispatch:
 
 jobs:
-  pulse:
-    name: System Pulse
+  status:
+    name: Generate Status
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
-      - name: Ping opusdelta.io
-        id: ping
-        run: |
-          STATUS=$(curl -o /dev/null -s -w "%{http_code}" https://opusdelta.io)
-          LATENCY=$(curl -o /dev/null -s -w "%{time_total}" https://opusdelta.io)
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          echo "latency=$LATENCY" >> $GITHUB_OUTPUT
-          echo "◉ opusdelta.io → HTTP $STATUS · ${LATENCY}s"
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Verify system status
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Generate system status
+        run: python scripts/status.py
+
+      - name: Commit & push
         run: |
-          if [ "${{ steps.ping.outputs.status }}" != "200" ]; then
-            echo "⚠ System anomaly detected: HTTP ${{ steps.ping.outputs.status }}"
-            exit 1
-          else
-            echo "◉ System nominal · ${{ steps.ping.outputs.latency }}s latency"
-          fi
+          git config user.name "opus-delta[bot]"
+          git config user.email "research@opusdelta.io"
+          git add README.md
+          git diff --cached --quiet || git commit -m "◉ system status · cycle $(python3 -c 'import datetime; print((datetime.datetime.utcnow().date() - datetime.date(2026,1,1)).days)')"
+          git push
